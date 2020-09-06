@@ -1,0 +1,9 @@
+[package]
+name = "excelerator"
+version = "0.1.0"
+authors = ["Kris Scott <kscott91@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+thiserror = "1.0"
+calamine = "0.16"
