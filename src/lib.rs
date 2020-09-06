@@ -164,3 +164,14 @@ impl<'a> RowData<'a> {
         self.source.get(self.row_number, column_header)
     }
 }
+
+pub fn from_path<P: AsRef<Path>>(path: P) -> Result<WorkbookData> {
+    WorkbookData::from_path(path)
+}
+
+pub fn from_path_with_sheet_name<P: AsRef<Path>>(
+    path: P,
+    sheet_name: &str,
+) -> Result<WorkbookData> {
+    WorkbookData::from_path_with_sheet_name(path, sheet_name)
+}
