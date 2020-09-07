@@ -1,9 +1,10 @@
 use calamine::{open_workbook_auto, DataType, Range, Reader, Sheets};
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum LoadError {
     #[error("No data found in '{}'", .filename)]
     Empty { filename: String },
 
@@ -17,7 +18,14 @@ pub enum Error {
     CalamineError(#[from] calamine::Error),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+#[derive(Debug, thiserror::Error)]
+pub enum DataError {
+    #[error("Key '{}' value could not be parsed: {}", .key, .value)]
+    ParseError { key: String, value: String },
+
+    #[error("No data found for key '{}'", .0)]
+    NoValue(String),
+}
 
 pub struct WorkbookData {
     header: HashMap<String, u32>,
@@ -29,7 +37,10 @@ pub struct WorkbookData {
 }
 
 impl WorkbookData {
-    fn from_workbook_sheet_name(workbook: &mut Sheets, sheet_name: &str) -> Option<Result<Self>> {
+    fn from_workbook_sheet_name(
+        workbook: &mut Sheets,
+        sheet_name: &str,
+    ) -> Option<Result<Self, LoadError>> {
         let range = match workbook.worksheet_range(sheet_name)? {
             Ok(range) => range,
             Err(err) => return Some(Err(err.into())),
@@ -69,7 +80,7 @@ impl WorkbookData {
         }
     }
 
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, LoadError> {
         // For error message only
         let filename = path.as_ref().to_string_lossy().to_string();
 
@@ -81,10 +92,13 @@ impl WorkbookData {
             }
         }
 
-        Err(Error::Empty { filename })
+        Err(LoadError::Empty { filename })
     }
 
-    pub fn from_path_with_sheet_name<P: AsRef<Path>>(path: P, sheet_name: &str) -> Result<Self> {
+    pub fn from_path_with_sheet_name<P: AsRef<Path>>(
+        path: P,
+        sheet_name: &str,
+    ) -> Result<Self, LoadError> {
         // For error message only
         let filename = path.as_ref().to_string_lossy().to_string();
 
@@ -93,7 +107,7 @@ impl WorkbookData {
         match Self::from_workbook_sheet_name(&mut workbook, sheet_name) {
             Some(Ok(data)) => Ok(data),
             Some(Err(err)) => Err(err.into()),
-            None => Err(Error::EmptySheet {
+            None => Err(LoadError::EmptySheet {
                 filename,
                 sheet_name: sheet_name.to_owned(),
             }),
@@ -160,18 +174,30 @@ impl<'a> RowData<'a> {
     }
 
     /// Get the value in the cell of this row with the matching column header
-    pub fn get(&self, column_header: &str) -> Option<String> {
-        self.source.get(self.row_number, column_header)
+    pub fn get(&self, column_header: &str) -> Result<String, DataError> {
+        match self.source.get(self.row_number, column_header) {
+            Some(value) => Ok(value),
+            None => Err(DataError::NoValue(column_header.into())),
+        }
+    }
+
+    pub fn parse<T: FromStr>(&self, column_header: &str) -> Result<T, DataError> {
+        let value_str = self.get(column_header)?;
+
+        value_str.parse().map_err(|_| DataError::ParseError {
+            key: column_header.into(),
+            value: value_str,
+        })
     }
 }
 
-pub fn from_path<P: AsRef<Path>>(path: P) -> Result<WorkbookData> {
+pub fn from_path<P: AsRef<Path>>(path: P) -> Result<WorkbookData, LoadError> {
     WorkbookData::from_path(path)
 }
 
 pub fn from_path_with_sheet_name<P: AsRef<Path>>(
     path: P,
     sheet_name: &str,
-) -> Result<WorkbookData> {
+) -> Result<WorkbookData, LoadError> {
     WorkbookData::from_path_with_sheet_name(path, sheet_name)
 }
