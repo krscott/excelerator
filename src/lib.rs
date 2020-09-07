@@ -126,6 +126,15 @@ impl WorkbookData {
         Some(value.to_string())
     }
 
+    pub fn is_row_empty(&self, row_number: u32) -> bool {
+        0 == self
+            .header
+            .keys()
+            .filter_map(|h| self.get(row_number, h))
+            .filter(|v| !v.is_empty())
+            .count()
+    }
+
     pub fn iter_rows<'a>(&'a self) -> RowsIterator<'a> {
         RowsIterator {
             source: self,
@@ -188,6 +197,10 @@ impl<'a> RowData<'a> {
             key: column_header.into(),
             value: value_str,
         })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.source.is_row_empty(self.row_number)
     }
 }
 
